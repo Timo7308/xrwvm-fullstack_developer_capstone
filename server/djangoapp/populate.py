@@ -1,3 +1,4 @@
+from djangoapp.models import CarMake, CarModel
 
 
 
