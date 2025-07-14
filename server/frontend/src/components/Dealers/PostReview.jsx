@@ -1,157 +1,165 @@
-import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import React, { useState, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import "./Dealers.css";
 import "../assets/style.css";
-import Header from '../Header/Header';
+import Header from "../Header/Header";
 
 const PostReview = () => {
-  const [dealer, setDealer] = useState({});
+  const [dealer, setDealer] = useState(null);
+  const [carmodels, setCarmodels] = useState([]);
   const [review, setReview] = useState("");
   const [model, setModel] = useState("");
   const [year, setYear] = useState("");
   const [date, setDate] = useState("");
-  const [carmodels, setCarmodels] = useState([]);
+  const navigate = useNavigate();
 
-  const params = useParams();
-  const id = params.id;
-  
+  // ✅ Hier muss `id` stehen, wenn deine Route /postreview/:id lautet
+  const { id } = useParams();
 
-  const curr_url = window.location.href;
-  const root_url = curr_url.substring(0, curr_url.indexOf("postreview"));
-  const dealer_url = `${root_url}djangoapp/dealer/${id}`;
-  const review_url = `${root_url}djangoapp/add_review`;
-  const carmodels_url = `${root_url}djangoapp/get_cars`;
+  // ✅ Relative Pfade statt window.location.origin
+  const endpoints = {
+    dealer:    `/djangoapp/dealer/${id}`,
+    addReview: `/djangoapp/add_review`,
+    carModels: `/djangoapp/get_cars`,
+  };
 
-  const postreview = async () => {
-    let name = `${sessionStorage.getItem("firstname")} ${sessionStorage.getItem("lastname")}`;
-    if (name.includes("null")) {
-      name = sessionStorage.getItem("username");
+  const fetchDealer = async () => {
+    try {
+      const res  = await fetch(endpoints.dealer);
+      if (!res.ok) throw new Error(res.status);
+      const data = await res.json();
+      if (data.status === 200) {
+        // könnte Array oder Objekt sein
+        const d = Array.isArray(data.dealer) ? data.dealer[0] : data.dealer;
+        setDealer(d);
+      }
+    } catch (err) {
+      console.error("Error fetching dealer:", err);
     }
+  };
 
-    if (!model || !review || !date || !year) {
-      alert("All details are mandatory");
+  const fetchCarModels = async () => {
+    try {
+      const res  = await fetch(endpoints.carModels);
+      if (!res.ok) throw new Error(res.status);
+      const data = await res.json();
+      if (data.CarModels) {
+        setCarmodels(data.CarModels);
+      }
+    } catch (err) {
+      console.error("Error fetching car models:", err);
+    }
+  };
+
+  const handlePostReview = async () => {
+    const name = (
+      `${sessionStorage.getItem("firstname") || ""} ${sessionStorage.getItem("lastname") || ""}`
+    ).trim() || sessionStorage.getItem("username");
+
+    if (!model || !review.trim() || !date || !year || !name) {
+      alert("Bitte alle Felder ausfüllen.");
       return;
     }
 
-    const [make_chosen, ...model_parts] = model.split(" ");
-    const model_chosen = model_parts.join(" ");
-
-    const jsoninput = JSON.stringify({
+    const [make, ...modelParts] = model.split(" ");
+    const payload = {
       name,
       dealership: id,
       review,
       purchase: true,
       purchase_date: date,
-      car_make: make_chosen,
-      car_model: model_chosen,
+      car_make: make,
+      car_model: modelParts.join(" "),
       car_year: year,
-    });
-
-    console.log("Submitting Review:", jsoninput);
+    };
 
     try {
-      const res = await fetch(review_url, {
-        method: "POST",
+      const res    = await fetch(endpoints.addReview, {
+        method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body: jsoninput,
+        body:    JSON.stringify(payload),
       });
-      const json = await res.json();
-
-      if (json.status === 200) {
-        window.location.href = `${window.location.origin}/dealer/${id}`;
+      const result = await res.json();
+      if (result.status === 200) {
+        alert("Review erfolgreich abgeschickt!");
+        navigate(`/dealer/${id}`);
       } else {
-        alert("Failed to post review. Try again.");
+        alert(`Fehler: ${result.message || "Konnte nicht posten."}`);
       }
-    } catch (error) {
-      console.error("Error posting review:", error);
-      alert("An error occurred. Please try again later.");
-    }
-  };
-
-  const get_dealer = async () => {
-    try {
-      const res = await fetch(dealer_url, { method: "GET" });
-      const retobj = await res.json();
-      if (retobj.status === 200 && Array.isArray(retobj.dealer) && retobj.dealer.length > 0) {
-        setDealer(retobj.dealer[0]); // ✅ Nur das erste Objekt speichern
-      }
-    } catch (error) {
-      console.error("Error fetching dealer:", error);
-    }
-  };
-
-  const get_cars = async () => {
-    try {
-      const res = await fetch(carmodels_url, { method: "GET" });
-      const retobj = await res.json();
-      if (retobj.CarModels) {
-        setCarmodels(retobj.CarModels);
-      }
-    } catch (error) {
-      console.error("Error fetching car models:", error);
+    } catch (err) {
+      console.error("Error posting review:", err);
+      alert("Server-Fehler. Bitte später erneut versuchen.");
     }
   };
 
   useEffect(() => {
-    get_dealer();
-    get_cars();
+    fetchDealer();
+    fetchCarModels();
   }, []);
+
+  if (!dealer) {
+    return (
+      <div>
+        <Header />
+        <p className="loading-text" style={{ margin: "5%", color: "grey" }}>
+          Lade Dealer-Details…
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div>
       <Header />
-      <div style={{ margin: "5%" }}>
-        <h1 style={{ color: "darkblue" }}>{dealer.full_name || "Dealer Name Loading..."}</h1>
+      <div className="review-container" style={{ margin: "5%" }}>
+        <h1 className="dealer-name" style={{ color: "darkblue" }}>
+          {dealer.full_name || "Dealer Name"}
+        </h1>
         <textarea
-          id='review'
-          cols='50'
-          rows='7'
-          placeholder="Write your review here..."
+          className="review-textarea"
+          placeholder="Schreibe deine Bewertung…"
+          value={review}
           onChange={(e) => setReview(e.target.value)}
-        ></textarea>
-        <div className='input_field'>
-          Purchase Date{" "}
+          cols="50"
+          rows="7"
+        />
+        <div className="input_field">
+          Kaufdatum{" "}
           <input
             type="date"
-            onChange={(e) => setDate(e.target.value)}
             value={date}
+            onChange={(e) => setDate(e.target.value)}
           />
         </div>
-        <div className='input_field'>
-          Car Make
+        <div className="input_field">
+          Auto Marke & Modell{" "}
           <select
-            name="cars"
-            id="cars"
             value={model}
             onChange={(e) => setModel(e.target.value)}
           >
-            <option value="" disabled hidden>
-              Choose Car Make and Model
+            <option value="" disabled>
+              Wähle Marke & Modell
             </option>
-            {carmodels.map((carmodel, index) => (
-              <option key={index} value={`${carmodel.CarMake} ${carmodel.CarModel}`}>
-                {carmodel.CarMake} {carmodel.CarModel}
+            {carmodels.map((c, i) => (
+              <option key={i} value={`${c.CarMake} ${c.CarModel}`}>
+                {c.CarMake} {c.CarModel}
               </option>
             ))}
           </select>
         </div>
-
-        <div className='input_field'>
-          Car Year{" "}
+        <div className="input_field">
+          Baujahr{" "}
           <input
             type="number"
-            onChange={(e) => setYear(e.target.value)}
-            max={2025}
             min={1990}
+            max={2025}
             value={year}
+            onChange={(e) => setYear(e.target.value)}
           />
         </div>
-
-        <div>
-          <button className='postreview' onClick={postreview}>
-            Post Review
-          </button>
-        </div>
+        <button className="postreview" onClick={handlePostReview}>
+          Bewertung abschicken
+        </button>
       </div>
     </div>
   );
